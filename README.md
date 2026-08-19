@@ -55,13 +55,20 @@ Quando o Snes9x for fechado, o SUPER LIBRARY volta para a frente automaticamente
 
 ### Atalho especial durante o jogo
 
-Com um controle conectado, **segure R1 / RB por aproximadamente 1 segundo** para solicitar o fechamento do Snes9x e retornar ao SUPER LIBRARY.
+O atalho de retorno se adapta ao tipo de controle conectado:
+
+- **controle moderno:** segure **R2 / RT por aproximadamente 1,2 segundo**;
+- **controle estilo SNES / sem gatilhos:** segure **START + SELECT por aproximadamente 1,2 segundo**.
+
+Assim, R1/RB permanece disponível para os comandos normais dos jogos durante o gameplay.
 
 ---
 
 ## Controles — Gamepad
 
-O programa usa a camada de controle do **SDL/pygame**. Controles reconhecidos como game controllers pelo Windows/SDL recebem o mapeamento normalizado abaixo.
+O programa usa a camada de controle do **SDL/pygame**. Controles reconhecidos como game controllers pelo Windows/SDL recebem mapeamento normalizado e o SUPER LIBRARY adapta seus atalhos ao tipo de dispositivo.
+
+### Controles modernos
 
 | Ação | Xbox / XInput | PlayStation | Função |
 |---|---|---|---|
@@ -70,11 +77,17 @@ O programa usa a camada de controle do **SDL/pygame**. Controles reconhecidos co
 | Voltar | **B** | **Circle (○)** | Sai do fullscreen ou fecha o launcher quando em janela |
 | Smart Refresh | **X** | **Square (□)** | Atualiza e repara a biblioteca com correspondências de alta confiança |
 | Snes9x Manager | **Y** | **Triangle (△)** | Instalar, atualizar, reparar ou selecionar Snes9x |
-| Música | **LB** | **L1** | Liga/desliga a música do launcher |
+| Música | **LT** | **L2** | Liga/desliga a música do launcher |
 | Avanço rápido | **RB** | **R1** | No launcher: avança 5 jogos |
-| Sair do jogo | **RB — segurar ~1 s** | **R1 — segurar ~1 s** | Durante o jogo: fecha Snes9x e retorna ao launcher |
+| Sair do jogo | **RT — segurar ~1,2 s** | **R2 — segurar ~1,2 s** | Durante o jogo: fecha Snes9x e retorna ao launcher |
 | Configurar emulador | **Menu / Start** | **Options** | Abre Snes9x sem ROM para configuração; pressione novamente para fechá-lo |
 | Fechar launcher | **View / Back** | **Share / Create** | Fecha o SUPER LIBRARY |
+
+### Controles estilo SNES / sem L2 e R2
+
+- **L1 / botão L** — liga/desliga a música do launcher;
+- **START + SELECT segurados por aproximadamente 1,2 segundo** — fecha o Snes9x e retorna ao SUPER LIBRARY;
+- os botões de ombro normais permanecem livres durante gameplay.
 
 ### Controles compatíveis
 
@@ -152,7 +165,7 @@ Procura automaticamente uma pasta com ROMs SNES no computador e pede confirmaç�
 Cria **cópias ZIP organizadas em outro diretório**. A coleção de origem permanece intacta.
 
 ### Find Missing Covers
-Procura capas ausentes usando metadados e fontes online, priorizando correspondências confiáveis e capas frontais adequadas. Capas existentes não são substituídas indiscriminadamente.
+Procura capas ausentes usando metadados e fontes online. O **LaunchBox Games Database é a fonte principal**, com validação de título e plataforma. Outras fontes são consultadas somente quando o LaunchBox não consegue fornecer uma correspondência adequada. Capas existentes não são substituídas indiscriminadamente.
 
 ---
 
@@ -196,11 +209,13 @@ O SUPER LIBRARY consulta o repositório oficial do Snes9x e o projeto `libretro/
 
 ## Música e indicador de energia
 
-A interface possui música ambiente própria. Ela pode ser ligada/desligada de três formas:
+A interface possui música ambiente própria. Ela pode ser ligada/desligada pelo controle compatível ou clicando no **LED** da interface, e a preferência fica salva para as próximas execuções.
 
-- **L1 / LB** no controle;
-- clique no **LED** da interface;
-- a preferência fica salva para as próximas execuções.
+- **controle moderno:** L2 / LT;
+- **controle estilo SNES / sem gatilhos:** L1 / L;
+- **mouse:** clique no LED.
+
+A playlist é dinâmica: todos os arquivos `.ogg` incluídos na pasta de música da build entram automaticamente na reprodução. O launcher começa por uma faixa aleatória, percorre a playlist continuamente e preserva o crossfade entre as músicas.
 
 Ao iniciar o Snes9x, a música do frontend é suspensa e volta quando o usuário retorna ao SUPER LIBRARY, respeitando a preferência salva.
 
@@ -213,17 +228,18 @@ Ao iniciar o Snes9x, a música do frontend é suspensa e volta quando o usuário
 - títulos longos com rolagem automática;
 - suporte a mouse, teclado e gamepad;
 - hot-plug e reconexão de controles USB/Bluetooth;
+- atalhos adaptativos para controles modernos e estilo SNES;
 - inicialização e retorno automático do Snes9x;
-- atalho R1/RB para sair do jogo e retornar ao launcher;
+- R1/RB livre durante gameplay;
 - gerenciamento de Snes9x e shaders;
 - suporte a instalação externa de Snes9x;
 - importação e deduplicação exata de coleções;
 - perfis PT-BR e internacionais;
 - criação de cópia organizada sem alterar a origem;
-- busca inteligente de capas ausentes;
+- busca inteligente de capas ausentes com LaunchBox como fonte principal;
 - Smart Refresh para manutenção da biblioteca;
 - fullscreen;
-- música e efeitos sonoros de interface;
+- playlist dinâmica de música com crossfade e efeitos sonoros de interface;
 - instalação autônoma: **o usuário não precisa instalar Python, PySide6 ou pygame**.
 
 ---
@@ -257,7 +273,8 @@ Use **Y → Download Snes9x and Shaders**. Também é possível selecionar uma i
 4. em controles genéricos, teste o modo XInput quando disponível.
 
 ### Quero sair do jogo sem pegar o mouse
-Segure **R1 / RB por cerca de 1 segundo** enquanto o Snes9x estiver rodando.
+- em controle moderno, segure **R2 / RT por cerca de 1,2 segundo**;
+- em controle estilo SNES / sem gatilhos, segure **START + SELECT por cerca de 1,2 segundo**.
 
 ### Meu antivírus mostrou um alerta
 Não desative sua proteção. Confirme que o instalador veio da página oficial **Releases** deste repositório e compare o SHA-256 publicado na release. Consulte também [SECURITY.md](SECURITY.md).
