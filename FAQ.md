@@ -19,10 +19,18 @@ Sim. Abra **Y — SNES9X → Choose Existing**.
 Pressione **START / Options / Menu** no launcher. O Snes9x abre sem uma ROM para você acessar suas configurações. Pressione o mesmo controle novamente para fechá-lo.
 
 ## Como volto ao SUPER LIBRARY durante um jogo?
-Segure **R1 / RB por aproximadamente 1 segundo**.
+O atalho se adapta ao tipo de controle:
 
-## O R1/RB faz outra coisa no launcher?
-Sim. No launcher, um toque em R1/RB avança cinco jogos. A ação de fechar Snes9x só é usada enquanto um jogo está rodando e exige segurar o botão.
+- **controle moderno:** segure **R2 / RT por aproximadamente 1,2 segundo**;
+- **controle estilo SNES / sem L2 e R2:** segure **START + SELECT por aproximadamente 1,2 segundo**.
+
+O Snes9x será fechado e o SUPER LIBRARY voltará à frente.
+
+## O R1/RB continua livre nos jogos?
+Sim. R1/RB não é mais usado para fechar o Snes9x durante gameplay. No launcher, ele continua disponível para avanço rápido na biblioteca quando aplicável.
+
+## Como funciona o controle da música?
+Em controles modernos com gatilhos, use **L2 / LT**. Em controles estilo SNES ou sem gatilhos, use **L1 / L**. Também é possível clicar no LED da interface.
 
 ## Posso usar DualSense / DualShock?
 O frontend usa SDL. DualShock 4 e DualSense normalmente são expostos como controles padrão no Windows/SDL, por USB ou Bluetooth. A experiência exata pode variar de acordo com driver, conexão e mapeamento do sistema.
@@ -41,6 +49,12 @@ Use **SELECT → Create Organized Copy**. Essa função grava em outro diretóri
 
 ## O importador remove traduções ou revisões diferentes?
 Não por nome. A deduplicação é baseada no payload real. Se duas ROMs tiverem conteúdo diferente, variantes como traduções, regiões e revisões podem coexistir.
+
+## Como funciona a busca de capas?
+O SUPER LIBRARY prioriza o **LaunchBox Games Database** para correspondências confiáveis de capas frontais e usa outras fontes somente quando o LaunchBox não consegue fornecer uma correspondência adequada.
+
+## A música aceita mais de duas faixas?
+Sim. A playlist é dinâmica: todos os arquivos `.ogg` incluídos na pasta de música da build entram na reprodução automática. O launcher inicia por uma faixa aleatória e segue continuamente com crossfade entre as músicas.
 
 ## Meu antivírus alertou sobre o programa. O que faço?
 Não desative o antivírus. Verifique se o instalador foi obtido da página oficial Releases deste repositório e confira o SHA-256 publicado. Softwares novos/sem reputação suficiente podem gerar alertas heurísticos. Veja [SECURITY.md](SECURITY.md).
