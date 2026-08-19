@@ -24,7 +24,12 @@ Navegue com D-Pad/analógico ou com o mouse e pressione:
 - `Enter` / `Space` no teclado.
 
 ## 5. Volte do jogo
-Durante o jogo, segure **R1 / RB por aproximadamente 1 segundo**. O Snes9x será fechado e o SUPER LIBRARY voltará à frente.
+O atalho se adapta ao tipo de controle conectado:
+
+- **controle moderno:** segure **R2 / RT por aproximadamente 1,2 segundo**;
+- **controle estilo SNES / sem gatilhos:** segure **START + SELECT por aproximadamente 1,2 segundo**.
+
+O Snes9x será fechado e o SUPER LIBRARY voltará à frente. R1/RB permanece livre durante o gameplay.
 
 ## Atalhos essenciais
 
@@ -35,8 +40,11 @@ Durante o jogo, segure **R1 / RB por aproximadamente 1 segundo**. O Snes9x será
 | B / Circle | Voltar |
 | X / Square | Smart Refresh |
 | Y / Triangle | Snes9x Manager |
-| L1 / LB | Música |
-| R1 / RB | +5 jogos; segurar durante jogo para sair |
+| L2 / LT | Música em controles modernos |
+| L1 / L | Música em controles sem gatilhos |
+| R1 / RB | +5 jogos no launcher |
+| R2 / RT segurado ~1,2 s | Sair do jogo em controles modernos |
+| START + SELECT segurados ~1,2 s | Sair do jogo em controles sem gatilhos |
 | Start / Options | Configurar Snes9x |
 
 Para a lista completa, veja [CONTROLS.md](CONTROLS.md).
