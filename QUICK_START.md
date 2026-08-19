@@ -3,7 +3,7 @@
 ## 1. Instale
 Baixe `SUPER_LIBRARY_Setup_v1.0.0.exe` pela página **Releases** e conclua a instalação.
 
-> Não baixe/copiei somente o `SuperLibrary.exe` da pasta instalada. O arquivo de distribuição correto é o **Setup**.
+> Não baixe/copie somente o `SuperLibrary.exe` da pasta instalada. O arquivo de distribuição correto é o **Setup**.
 
 ## 2. Escolha sua biblioteca
 Abra o programa e clique em **SELECT → Choose Folder**.
