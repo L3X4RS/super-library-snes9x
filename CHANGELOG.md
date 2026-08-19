@@ -10,17 +10,34 @@ Primeira versão pública estável do SUPER LIBRARY.
 - títulos longos com marquee;
 - contador de jogos;
 - fullscreen;
-- música, efeitos de interface e LED interativo.
+- música, efeitos de interface e LED interativo;
+- D-Pad visual sem efeito de afundamento/deslocamento ao clicar.
 
 ### Controles
 - mouse;
 - teclado;
 - gamepads SDL/XInput;
 - suporte USB/Bluetooth e reconexão;
-- L1/LB para música;
-- R1/RB para avanço rápido na biblioteca;
-- R1/RB segurado durante o jogo para fechar Snes9x e retornar;
-- START/Options para abrir o Snes9x em modo de configuração.
+- atalhos adaptativos conforme o tipo de controle;
+- em controles modernos, L2/LT controla a música;
+- em controles modernos, R2/RT segurado por aproximadamente 1,2 s fecha o Snes9x e retorna;
+- em controles estilo SNES/sem gatilhos, L1/L controla a música;
+- em controles estilo SNES/sem gatilhos, START + SELECT segurados por aproximadamente 1,2 s fecham o Snes9x e retornam;
+- R1/RB permanece livre durante gameplay;
+- START/Options abre o Snes9x em modo de configuração.
+
+### Música
+- playlist dinâmica;
+- descoberta automática de todos os arquivos `.ogg` incluídos na pasta de música da build;
+- faixa inicial aleatória;
+- reprodução contínua com crossfade entre faixas;
+- música suspensa durante o Snes9x e retomada ao voltar ao frontend.
+
+### Capas
+- LaunchBox Games Database como fonte principal;
+- validação de título e plataforma;
+- uso de fontes alternativas somente quando o LaunchBox não fornece uma correspondência adequada;
+- busca de capas ausentes integrada à manutenção da biblioteca.
 
 ### Snes9x
 - instalação gerenciada opcional do Snes9x oficial;
