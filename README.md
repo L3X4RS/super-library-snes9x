@@ -14,6 +14,36 @@
 
 ![SUPER LIBRARY interface](docs/images/super-library-interface.png)
 
+---
+
+## Veja o SUPER LIBRARY em ação
+
+### ⭐ Favoritos
+
+<p align="center">
+  <img src="docs/images/Aba%20de%20Favoritos.png" alt="SUPER LIBRARY - Favoritos" width="100%">
+</p>
+
+Marque seus jogos preferidos e acesse uma visualização dedicada da biblioteca. O estado de Favorito permanece salvo entre sessões.
+
+### 💾 Salve seu progresso ao sair
+
+<p align="center">
+  <img src="docs/images/Salvar%20a%20qualqer%20momento.png" alt="SUPER LIBRARY - Salvar progresso" width="100%">
+</p>
+
+Ao retornar ao SUPER LIBRARY durante um jogo, você pode criar um ponto de continuação antes de fechar o Snes9x — sem precisar lidar manualmente com slots ou arquivos de save state.
+
+### ▶️ Continue exatamente de onde parou
+
+<p align="center">
+  <img src="docs/images/Continuar%20de%20onde%20parou.png" alt="SUPER LIBRARY - Continuar jogo" width="100%">
+</p>
+
+Na próxima vez que o mesmo jogo for aberto, o launcher oferece a opção de continuar daquele ponto ou iniciar normalmente.
+
+---
+
 ## O que é o SUPER LIBRARY?
 
 O **SUPER LIBRARY** é uma interface independente para o **Snes9x** criada para transformar uma coleção de jogos de Super Nintendo em uma biblioteca visual simples de navegar.
