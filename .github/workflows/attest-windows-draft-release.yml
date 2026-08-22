@@ -1,0 +1,161 @@
+name: Attest Windows Draft Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Draft release tag to attest
+        required: true
+        default: v1.0.3
+        type: string
+      asset_name:
+        description: Installer asset already attached to the draft release
+        required: true
+        default: SUPER_LIBRARY_Setup_v1.0.3.exe
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: super-library-release-integrity
+  cancel-in-progress: false
+
+jobs:
+  attest:
+    name: Hash and attest draft installer
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    env:
+      PREDICATE_TYPE: https://github.com/L3X4RS/super-library-snes9x/attestations/local-release/v1
+
+    steps:
+      - name: Require draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $isDraft = gh release view "$env:RELEASE_TAG" --repo "${{ github.repository }}" --json isDraft --jq '.isDraft'
+          if ($isDraft -ne 'true') {
+            throw "Release $env:RELEASE_TAG must exist and remain a DRAFT while integrity checks run."
+          }
+
+      - name: Download installer from draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          ASSET_NAME: ${{ inputs.asset_name }}
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'super-library-release-integrity'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          gh release download "$env:RELEASE_TAG" --repo "${{ github.repository }}" --pattern "$env:ASSET_NAME" --dir $dir
+          $file = Join-Path $dir $env:ASSET_NAME
+          if (-not (Test-Path -LiteralPath $file)) {
+            throw "Release asset not found: $env:ASSET_NAME"
+          }
+          "RELEASE_FILE=$file" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Compute SHA-256 and create integrity predicate
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          ASSET_NAME: ${{ inputs.asset_name }}
+        run: |
+          $item = Get-Item -LiteralPath "$env:RELEASE_FILE"
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "$env:RELEASE_FILE").Hash.ToLowerInvariant()
+          $checksum = Join-Path "$env:RELEASE_DIR" "$env:ASSET_NAME.sha256.txt"
+          "$hash  $env:ASSET_NAME" | Set-Content -LiteralPath $checksum -Encoding ascii
+
+          $predicatePath = Join-Path "$env:RELEASE_DIR" 'super-library-local-release-predicate.json'
+          $predicate = [ordered]@{
+            schemaVersion = 1
+            artifactOrigin = 'locally-built-uploaded-to-github-draft-release'
+            releaseTag = $env:RELEASE_TAG
+            assetName = $env:ASSET_NAME
+            sha256 = $hash
+            sizeBytes = [int64]$item.Length
+            repository = '${{ github.repository }}'
+            repositoryCommit = '${{ github.sha }}'
+            workflowRunId = '${{ github.run_id }}'
+            claim = 'This attestation confirms that these exact artifact bytes were hashed and attested by this repository workflow after upload to a draft release. It does not claim Authenticode publisher identity and does not claim that GitHub Actions compiled the application.'
+          }
+          $predicate | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $predicatePath -Encoding utf8
+
+          "RELEASE_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CHECKSUM_FILE=$checksum" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PREDICATE_FILE=$predicatePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          Write-Host "SHA-256: $hash"
+          Write-Host "Size: $($item.Length) bytes"
+
+      - name: Create GitHub artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ runner.temp }}/super-library-release-integrity/${{ inputs.asset_name }}
+          predicate-type: https://github.com/L3X4RS/super-library-snes9x/attestations/local-release/v1
+          predicate-path: ${{ runner.temp }}/super-library-release-integrity/super-library-local-release-predicate.json
+
+      - name: Verify attestation from this repository
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify "$env:RELEASE_FILE" --repo "${{ github.repository }}" --predicate-type "$env:PREDICATE_TYPE"
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub attestation verification failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Create verification instructions
+        shell: pwsh
+        env:
+          ASSET_NAME: ${{ inputs.asset_name }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $verify = Join-Path "$env:RELEASE_DIR" "$env:ASSET_NAME.VERIFY.txt"
+          @"
+          SUPER LIBRARY release integrity verification
+          ============================================
+
+          Release: $env:RELEASE_TAG
+          File: $env:ASSET_NAME
+          SHA-256: $env:RELEASE_SHA256
+
+          Verify SHA-256 in PowerShell:
+          Get-FileHash .\$env:ASSET_NAME -Algorithm SHA256
+
+          Verify GitHub artifact attestation:
+          gh attestation verify .\$env:ASSET_NAME --repo ${{ github.repository }} --predicate-type $env:PREDICATE_TYPE
+
+          Important:
+          This GitHub/Sigstore attestation proves the exact file was processed and attested by the official repository workflow.
+          It does NOT provide Microsoft Authenticode publisher identity, and Windows may still show "Unknown publisher" until a paid trusted Code Signing certificate is adopted in the future.
+          "@ | Set-Content -LiteralPath $verify -Encoding utf8
+          "VERIFY_FILE=$verify" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Attach checksum and verification guide to draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release upload "$env:RELEASE_TAG" "$env:CHECKSUM_FILE" "$env:VERIFY_FILE" --repo "${{ github.repository }}" --clobber
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          @"
+          ### SUPER LIBRARY release integrity
+
+          - Release: `${{ inputs.tag }}`
+          - Asset: `${{ inputs.asset_name }}`
+          - SHA-256: `$env:RELEASE_SHA256`
+          - GitHub artifact attestation: created and verified
+          - Authenticode: not provided by this free workflow
+          - Publish only after a clean-install smoke test
+          "@ | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
