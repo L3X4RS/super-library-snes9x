@@ -1,102 +1,88 @@
-# Windows Code Signing
+# Windows release integrity
 
-SUPER LIBRARY public Windows releases should be signed with a real Authenticode code-signing certificate before the GitHub Release is published.
+SUPER LIBRARY currently uses a **zero-cost release integrity workflow** based on SHA-256 plus GitHub Artifact Attestations.
 
-The public repository does not contain the proprietary application source code. Signing is therefore split into two layers:
+The project does not currently require a paid Authenticode certificate in order to publish a release.
 
-1. Build the application locally using the trusted project source.
-2. Sign the Windows release artifact with SSL.com eSigner before publishing the GitHub Release.
+The public repository contains documentation and binary releases; the proprietary application source is built locally.
 
-## Recommended certificate
+## Current no-cost release model
 
-Use an SSL.com Code Signing certificate enrolled in **eSigner for Code**. eSigner keeps the private key in SSL.com's cloud HSM and exposes it to standard Windows signing tools through eSigner CKA.
+The release process is:
 
-For SUPER LIBRARY, an OV Code Signing certificate is appropriate. The repository itself must never contain certificate passwords, TOTP secrets, private keys or exported PFX files.
+1. Build and test the application locally from the trusted private project source.
+2. Generate `SUPER_LIBRARY_Setup_v1.0.3.exe`.
+3. Create a **Draft GitHub Release** for `v1.0.3`.
+4. Upload the installer to the draft.
+5. Run **Actions -> Attest Windows Draft Release**.
+6. The workflow downloads the exact installer bytes from the draft.
+7. It computes SHA-256.
+8. It creates a signed GitHub/Sigstore artifact attestation.
+9. It verifies the attestation from this repository.
+10. It uploads the `.sha256.txt` and `.VERIFY.txt` files to the draft release.
+11. Download the installer from the draft and perform a clean-install smoke test.
+12. Publish the release only after the test passes.
 
-## GitHub repository secrets
+Artifact attestations are available for this public repository without purchasing a Code Signing certificate.
 
-After the SSL.com certificate is active and enrolled in eSigner, open:
+## Important limitation
 
-`Settings -> Secrets and variables -> Actions -> New repository secret`
+GitHub Artifact Attestations are **not Microsoft Authenticode**.
 
-Create these four secrets:
+The attestation proves that the exact installer bytes were processed and attested by the official `L3X4RS/super-library-snes9x` GitHub workflow. Because the application is compiled locally from private source, the attestation deliberately does **not** claim that GitHub Actions compiled the application.
 
-- `SSL_ESIGNER_USERNAME`
-- `SSL_ESIGNER_PASSWORD`
-- `SSL_ESIGNER_TOTP_SECRET`
-- `SSL_ESIGNER_MODE`
+Without a trusted Authenticode certificate, Windows may still show:
 
-For production signing, `SSL_ESIGNER_MODE` should normally be:
+- `Unknown publisher`;
+- Microsoft Defender SmartScreen warnings for a new/low-reputation binary.
 
-`product`
+That limitation is expected and must not be hidden from users.
 
-Never commit these values to the repository.
+## Workflow
 
-## Signing a v1.0.3 installer
+The free workflow is:
 
-1. Build and test the Windows package locally.
-2. Create a **Draft** GitHub Release with tag `v1.0.3`.
-3. Attach the unsigned installer to that draft using this exact default name:
+`.github/workflows/attest-windows-draft-release.yml`
 
-   `SUPER_LIBRARY_Setup_v1.0.3.exe`
+It requires **no paid provider credentials and no repository secrets**.
 
-4. Open `Actions -> Sign Windows Draft Release`.
-5. Choose `Run workflow`.
-6. Confirm the tag and asset name.
-7. The workflow will:
-   - refuse to operate on a release that is not a draft;
-   - download SSL.com's eSigner CKA;
-   - authenticate with repository secrets;
-   - load the cloud-backed code-signing certificate;
-   - sign the installer with Authenticode SHA-256;
-   - request an RFC 3161 timestamp from `http://ts.ssl.com`;
-   - verify the resulting signature with SignTool and PowerShell;
-   - generate a SHA-256 checksum;
-   - replace the draft asset with the signed installer;
-   - attach the checksum file to the same draft release.
-8. Download the signed installer from the draft and perform a clean-install smoke test.
-9. Only then publish the GitHub Release.
+The workflow refuses to operate on a release that is not a draft. It does not modify the installer; it hashes and attests the exact uploaded bytes.
 
-## Important: sign installed executables too
+The custom predicate is documented in:
 
-Signing the outer Setup is important, but a complete Windows release should also sign the executable files that the installer places on disk, especially:
+`docs/LOCAL_RELEASE_ATTESTATION.md`
 
-- `SuperLibrary.exe`
-- `SNESCore.dll`
-- `Uninstall SUPER LIBRARY.exe`
+Predicate type:
 
-The correct order is:
+`https://github.com/L3X4RS/super-library-snes9x/attestations/local-release/v1`
 
-`build -> sign installed binaries -> build installer -> sign installer -> verify -> SHA-256 -> publish`
+## Verify the installer
 
-The current public GitHub workflow signs the final installer layer. The locally generated public binaries should therefore also be Authenticode-signed before the final installer is produced whenever the release signing environment is available.
-
-## Verification on Windows
-
-You can verify a signed file with PowerShell:
+Install GitHub CLI and run:
 
 ```powershell
-Get-AuthenticodeSignature .\SUPER_LIBRARY_Setup_v1.0.3.exe | Format-List
+gh attestation verify .\SUPER_LIBRARY_Setup_v1.0.3.exe --repo L3X4RS/super-library-snes9x --predicate-type https://github.com/L3X4RS/super-library-snes9x/attestations/local-release/v1
 ```
 
-A correctly trusted release should report `Status : Valid`.
-
-You can also verify with SignTool:
-
-```bat
-signtool verify /pa /all /v SUPER_LIBRARY_Setup_v1.0.3.exe
-```
-
-Generate the release checksum with:
+Verify SHA-256 independently:
 
 ```powershell
 Get-FileHash .\SUPER_LIBRARY_Setup_v1.0.3.exe -Algorithm SHA256
 ```
 
+Compare the result with the `.sha256.txt` file attached to the same GitHub Release.
+
+## Optional Authenticode in the future
+
+When budget permits, a trusted OV Code Signing certificate can be added later. At that point the preferred order becomes:
+
+`build -> sign installed binaries -> build installer -> sign installer -> verify -> SHA-256 -> GitHub attestation -> publish`
+
+A paid certificate is an enhancement to Windows publisher identity; it is not a prerequisite for the current GitHub release integrity process.
+
 ## Security rules
 
-- Never upload a PFX/private key to GitHub.
-- Never put eSigner credentials in a BAT, YAML file, issue, release note or commit.
-- Keep the release as a draft until signature verification succeeds.
-- Do not publish an unsigned replacement under the same release tag.
-- If the signing workflow fails, leave the release as draft and investigate before publishing.
+- Never upload private keys, PFX files, certificate passwords, TOTP secrets or signing credentials to the repository.
+- Keep the release as a draft until integrity verification and clean-install testing succeed.
+- Never replace a published installer silently under the same release without updating its checksum and attestation.
+- Do not describe the installer as Authenticode-signed unless `Get-AuthenticodeSignature` actually reports a valid trusted signature.
