@@ -1,0 +1,169 @@
+name: Sign Windows Draft Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Draft release tag to sign
+        required: true
+        default: v1.0.3
+        type: string
+      asset_name:
+        description: Unsigned installer asset already attached to the draft release
+        required: true
+        default: SUPER_LIBRARY_Setup_v1.0.3.exe
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: super-library-esigner
+  cancel-in-progress: false
+
+jobs:
+  sign:
+    name: Authenticode sign draft installer
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Require draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $isDraft = gh release view "$env:RELEASE_TAG" --repo "${{ github.repository }}" --json isDraft --jq '.isDraft'
+          if ($isDraft -ne 'true') {
+            throw "Release $env:RELEASE_TAG must exist and remain a DRAFT while signing."
+          }
+
+      - name: Download unsigned installer from draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          ASSET_NAME: ${{ inputs.asset_name }}
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\sl-sign" | Out-Null
+          gh release download "$env:RELEASE_TAG" --repo "${{ github.repository }}" --pattern "$env:ASSET_NAME" --dir "$env:RUNNER_TEMP\sl-sign"
+          $file = Join-Path "$env:RUNNER_TEMP\sl-sign" $env:ASSET_NAME
+          if (-not (Test-Path -LiteralPath $file)) { throw "Release asset not found: $env:ASSET_NAME" }
+          "SIGNABLE_FILE=$file" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Download eSigner CKA
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'eSigner_CKA_Setup.zip'
+          $unpack = Join-Path $env:RUNNER_TEMP 'eSigner_CKA_Setup'
+          Invoke-WebRequest -Uri 'https://github.com/SSLcom/eSignerCKA/releases/download/v1.0.6/SSL.COM-eSigner-CKA_1.0.6.zip' -OutFile $zip
+          Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force
+          $installer = Get-ChildItem -Path $unpack -Filter '*.exe' -Recurse | Select-Object -First 1
+          if (-not $installer) { throw 'eSigner CKA installer was not found in downloaded archive.' }
+          "ESIGNER_INSTALLER=$($installer.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install eSigner CKA
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'eSignerCKA'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Start-Process -FilePath "$env:ESIGNER_INSTALLER" -ArgumentList @('/CURRENTUSER','/VERYSILENT','/SUPPRESSMSGBOXES',"/DIR=$dir") -Wait -NoNewWindow
+          $tool = Join-Path $dir 'eSignerCKATool.exe'
+          if (-not (Test-Path -LiteralPath $tool)) { throw 'eSignerCKATool.exe was not installed.' }
+          "ESIGNER_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ESIGNER_TOOL=$tool" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Configure SSL.com eSigner account
+        shell: pwsh
+        env:
+          ES_USER: ${{ secrets.SSL_ESIGNER_USERNAME }}
+          ES_PASSWORD: ${{ secrets.SSL_ESIGNER_PASSWORD }}
+          ES_TOTP_SECRET: ${{ secrets.SSL_ESIGNER_TOTP_SECRET }}
+          ES_MODE: ${{ secrets.SSL_ESIGNER_MODE }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:ES_USER)) { throw 'Missing repository secret SSL_ESIGNER_USERNAME.' }
+          if ([string]::IsNullOrWhiteSpace($env:ES_PASSWORD)) { throw 'Missing repository secret SSL_ESIGNER_PASSWORD.' }
+          if ([string]::IsNullOrWhiteSpace($env:ES_TOTP_SECRET)) { throw 'Missing repository secret SSL_ESIGNER_TOTP_SECRET.' }
+          if ([string]::IsNullOrWhiteSpace($env:ES_MODE)) { throw 'Missing repository secret SSL_ESIGNER_MODE (normally product).' }
+          $masterKey = Join-Path $env:RUNNER_TEMP 'esigner-master.key'
+          & "$env:ESIGNER_TOOL" config -mode "$env:ES_MODE" -user "$env:ES_USER" -pass "$env:ES_PASSWORD" -totp "$env:ES_TOTP_SECRET" -key "$masterKey" -r
+          if ($LASTEXITCODE -ne 0) { throw "eSigner configuration failed with exit code $LASTEXITCODE." }
+
+      - name: Load code-signing certificate
+        shell: pwsh
+        run: |
+          & "$env:ESIGNER_TOOL" unload | Out-Null
+          & "$env:ESIGNER_TOOL" load
+          if ($LASTEXITCODE -ne 0) { throw "eSigner certificate load failed with exit code $LASTEXITCODE." }
+          $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.HasPrivateKey } | Select-Object -First 1
+          if (-not $cert) { throw 'No code-signing certificate with private key was loaded into CurrentUser\\My.' }
+          "SIGNING_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Signing certificate subject: $($cert.Subject)"
+          Write-Host "Signing certificate expires: $($cert.NotAfter.ToString('u'))"
+
+      - name: Locate SignTool
+        shell: pwsh
+        run: |
+          $roots = @(
+            'C:\Program Files (x86)\Windows Kits\10\bin',
+            'C:\Program Files\Windows Kits\10\bin'
+          ) | Where-Object { Test-Path $_ }
+          $tool = foreach ($root in $roots) {
+            Get-ChildItem -Path $root -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' }
+          }
+          $tool = $tool | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $tool) {
+            $tool = foreach ($root in $roots) {
+              Get-ChildItem -Path $root -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match '\\x86\\signtool\.exe$' }
+            }
+            $tool = $tool | Sort-Object FullName -Descending | Select-Object -First 1
+          }
+          if (-not $tool) { throw 'signtool.exe was not found on the Windows runner.' }
+          "SIGNTOOL=$($tool.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Authenticode sign installer
+        shell: pwsh
+        run: |
+          & "$env:SIGNTOOL" sign /fd SHA256 /tr http://ts.ssl.com /td SHA256 /sha1 "$env:SIGNING_THUMBPRINT" "$env:SIGNABLE_FILE"
+          if ($LASTEXITCODE -ne 0) { throw "SignTool sign failed with exit code $LASTEXITCODE." }
+
+      - name: Verify Authenticode signature
+        shell: pwsh
+        run: |
+          & "$env:SIGNTOOL" verify /pa /all /v "$env:SIGNABLE_FILE"
+          if ($LASTEXITCODE -ne 0) { throw "SignTool verification failed with exit code $LASTEXITCODE." }
+          $sig = Get-AuthenticodeSignature -FilePath "$env:SIGNABLE_FILE"
+          if ($sig.Status -ne 'Valid') { throw "PowerShell Authenticode validation returned: $($sig.Status)" }
+          Write-Host "Verified publisher: $($sig.SignerCertificate.Subject)"
+
+      - name: Generate SHA-256 checksum
+        shell: pwsh
+        env:
+          ASSET_NAME: ${{ inputs.asset_name }}
+        run: |
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "$env:SIGNABLE_FILE").Hash.ToLowerInvariant()
+          $checksum = Join-Path (Split-Path -Parent "$env:SIGNABLE_FILE") "$env:ASSET_NAME.sha256.txt"
+          "$hash  $env:ASSET_NAME" | Set-Content -LiteralPath $checksum -Encoding ascii
+          "CHECKSUM_FILE=$checksum" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "SHA-256: $hash"
+
+      - name: Replace draft asset with signed installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          ASSET_NAME: ${{ inputs.asset_name }}
+        run: |
+          gh release upload "$env:RELEASE_TAG" "$env:SIGNABLE_FILE" "$env:CHECKSUM_FILE" --repo "${{ github.repository }}" --clobber
+
+      - name: Upload eSigner logs for diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esigner-logs-${{ github.run_id }}
+          path: C:\Users\runneradmin\AppData\Roaming\eSignerCKA\KSP
+          if-no-files-found: ignore
+          retention-days: 7
