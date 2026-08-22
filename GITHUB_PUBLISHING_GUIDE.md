@@ -36,37 +36,40 @@ Use:
 
 **GitHub -> Releases -> Draft a new release -> Attach binaries**
 
-A release deve permanecer como **Draft** durante assinatura, verificação e teste.
+A release deve permanecer como **Draft** durante verificação e teste.
 
-## Assinatura digital
+## Integridade gratuita da release
 
-A release pública deve usar Authenticode real. O fluxo recomendado está documentado em `CODE_SIGNING.md`.
+Enquanto o projeto não possui um certificado Authenticode pago, a release usa:
 
-Para assinatura em nuvem, o projeto usa o workflow:
+- SHA-256;
+- GitHub Artifact Attestation / Sigstore;
+- verificação automática no workflow oficial do repositório;
+- teste de instalação limpa antes da publicação.
 
-`.github/workflows/sign-windows-draft-release.yml`
+O workflow é:
 
-O workflow usa SSL.com eSigner CKA e espera os seguintes GitHub Actions secrets:
+`.github/workflows/attest-windows-draft-release.yml`
 
-- `SSL_ESIGNER_USERNAME`
-- `SSL_ESIGNER_PASSWORD`
-- `SSL_ESIGNER_TOTP_SECRET`
-- `SSL_ESIGNER_MODE`
+Ele não exige SSL.com, certificado pago, PFX ou GitHub secrets.
 
-Para produção, `SSL_ESIGNER_MODE` deve normalmente ser `product`.
+Importante: essa atestação não substitui Authenticode e não remove necessariamente avisos `Unknown publisher`/SmartScreen. Ela comprova a integridade dos bytes e sua vinculação ao workflow oficial do repositório.
 
-## Ordem correta da release
+## Ordem correta da release v1.0.3
 
 1. Gere a build local a partir da fonte confiável.
 2. Faça os testes locais de funcionamento.
-3. Assine os binários instalados (`SuperLibrary.exe`, `SNESCore.dll` e `Uninstall SUPER LIBRARY.exe`) quando o ambiente de Code Signing estiver disponível.
-4. Gere `SUPER_LIBRARY_Setup_v1.0.3.exe`.
-5. Crie uma **Draft Release** com tag `v1.0.3`.
-6. Anexe o Setup ainda não publicado ao draft.
-7. Execute **Actions -> Sign Windows Draft Release**.
-8. Confirme que o workflow terminou com sucesso e que a assinatura Authenticode é válida.
-9. Baixe o Setup assinado e faça uma instalação limpa.
-10. Só então publique a GitHub Release.
+3. Gere `SUPER_LIBRARY_Setup_v1.0.3.exe`.
+4. Crie uma **Draft Release** com tag `v1.0.3`.
+5. Anexe o Setup ao draft.
+6. Execute **Actions -> Attest Windows Draft Release**.
+7. Confirme que o workflow terminou com sucesso.
+8. Confirme que a release recebeu:
+   - `SUPER_LIBRARY_Setup_v1.0.3.exe.sha256.txt`;
+   - `SUPER_LIBRARY_Setup_v1.0.3.exe.VERIFY.txt`.
+9. Baixe novamente o Setup da Draft Release.
+10. Faça uma instalação limpa e o checklist funcional abaixo.
+11. Só então publique a GitHub Release.
 
 ## Checklist funcional antes de publicar
 
@@ -87,30 +90,30 @@ Para produção, `SSL_ESIGNER_MODE` deve normalmente ser `product`.
 - Desinstalação funciona.
 - Windows Defender e o software de segurança habitual não reportam problema indevido.
 
-## Verificação da assinatura
+## Verificar SHA-256
 
 PowerShell:
-
-```powershell
-Get-AuthenticodeSignature .\SUPER_LIBRARY_Setup_v1.0.3.exe | Format-List
-```
-
-O resultado esperado para uma release confiável é:
-
-`Status : Valid`
-
-Com SignTool:
-
-```bat
-signtool verify /pa /all /v SUPER_LIBRARY_Setup_v1.0.3.exe
-```
-
-## SHA-256
-
-Depois da assinatura, gere o hash do arquivo final — nunca do Setup anterior à assinatura:
 
 ```powershell
 Get-FileHash .\SUPER_LIBRARY_Setup_v1.0.3.exe -Algorithm SHA256
 ```
 
-Publique o SHA-256 junto com a release e mantenha `SECURITY.md`/release notes sincronizados com o arquivo efetivamente distribuído.
+Compare com o `.sha256.txt` anexado à mesma release.
+
+## Verificar GitHub Artifact Attestation
+
+Com GitHub CLI:
+
+```powershell
+gh attestation verify .\SUPER_LIBRARY_Setup_v1.0.3.exe --repo L3X4RS/super-library-snes9x --predicate-type https://github.com/L3X4RS/super-library-snes9x/attestations/local-release/v1
+```
+
+A semântica dessa atestação está documentada em:
+
+`docs/LOCAL_RELEASE_ATTESTATION.md`
+
+## Authenticode no futuro
+
+Quando houver orçamento para um certificado Code Signing confiável, Authenticode pode ser adicionado ao fluxo sem remover SHA-256 nem GitHub Artifact Attestations.
+
+Até lá, não anuncie a release como `digitally signed by SUPER LIBRARY`. Windows pode continuar exibindo `Unknown publisher`, o que é esperado para uma release sem certificado Authenticode confiável.
