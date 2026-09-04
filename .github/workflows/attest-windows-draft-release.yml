@@ -1,9 +1,8 @@
-name: Temporary Crimson Max Inventory Build
+name: Temporary Crimson Max Inventory Freestanding Build
 
 on:
   pull_request:
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,23 +17,39 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-mingw-w64-x86-64
-      - name: Build logged ASI
+      - name: Build loader probe
         run: |
-          x86_64-w64-mingw32-gcc -shared -O2 -s -o CrimsonMaxInventory1561_CD2.01.00_TEST2_LOGGED.asi tmp_crimson_build/CrimsonMaxInventory1561.c -static-libgcc
-      - name: Build no-log ASI
+          x86_64-w64-mingw32-gcc -shared -Os -s -ffreestanding -fno-builtin -fno-stack-protector -nostdlib -DPROBE_ONLY=1 \
+            -Wl,--entry=DllMain -Wl,--subsystem,windows \
+            -o CrimsonMaxInventory1561_LOADER_PROBE.asi tmp_crimson_build/CrimsonMaxInventory1561.c -lkernel32
+      - name: Build freestanding TEST3
         run: |
-          x86_64-w64-mingw32-gcc -shared -O2 -s -DNO_LOG=1 -o CrimsonMaxInventory1561_CD2.01.00_TEST2.asi tmp_crimson_build/CrimsonMaxInventory1561.c -static-libgcc
-      - name: Audit and hashes
+          x86_64-w64-mingw32-gcc -shared -Os -s -ffreestanding -fno-builtin -fno-stack-protector -nostdlib \
+            -Wl,--entry=DllMain -Wl,--subsystem,windows \
+            -o CrimsonMaxInventory1561_CD2.01.00_TEST3_FREESTANDING.asi tmp_crimson_build/CrimsonMaxInventory1561.c -lkernel32
+      - name: Audit PE and imports
         run: |
-          file CrimsonMaxInventory1561_CD2.01.00_TEST2_LOGGED.asi
-          x86_64-w64-mingw32-objdump -p CrimsonMaxInventory1561_CD2.01.00_TEST2_LOGGED.asi | head -n 120
-          sha256sum CrimsonMaxInventory1561_CD2.01.00_TEST2_LOGGED.asi CrimsonMaxInventory1561_CD2.01.00_TEST2.asi | tee SHA256SUMS.txt
+          file CrimsonMaxInventory1561_LOADER_PROBE.asi
+          file CrimsonMaxInventory1561_CD2.01.00_TEST3_FREESTANDING.asi
+          x86_64-w64-mingw32-objdump -p CrimsonMaxInventory1561_LOADER_PROBE.asi > probe_pe.txt
+          x86_64-w64-mingw32-objdump -p CrimsonMaxInventory1561_CD2.01.00_TEST3_FREESTANDING.asi > test3_pe.txt
+          echo '--- PROBE DLL NAMES ---'
+          grep 'DLL Name:' probe_pe.txt || true
+          echo '--- TEST3 DLL NAMES ---'
+          grep 'DLL Name:' test3_pe.txt || true
+          if grep -qiE 'msvcrt|ucrt|vcruntime|libgcc|libwinpthread' probe_pe.txt test3_pe.txt; then
+            echo 'Unexpected CRT/runtime import found'
+            exit 1
+          fi
+          sha256sum CrimsonMaxInventory1561_LOADER_PROBE.asi CrimsonMaxInventory1561_CD2.01.00_TEST3_FREESTANDING.asi | tee SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: CrimsonMaxInventory1561-CD2.01.00-TEST2
+          name: CrimsonMaxInventory1561-CD2.01.00-TEST3-FREESTANDING
           if-no-files-found: error
           path: |
-            CrimsonMaxInventory1561_CD2.01.00_TEST2_LOGGED.asi
-            CrimsonMaxInventory1561_CD2.01.00_TEST2.asi
+            CrimsonMaxInventory1561_LOADER_PROBE.asi
+            CrimsonMaxInventory1561_CD2.01.00_TEST3_FREESTANDING.asi
             SHA256SUMS.txt
+            probe_pe.txt
+            test3_pe.txt
             tmp_crimson_build/CrimsonMaxInventory1561.c
